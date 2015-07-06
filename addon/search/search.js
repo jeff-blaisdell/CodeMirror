@@ -53,7 +53,17 @@
     return cm.getSearchCursor(query, pos, queryCaseInsensitive(query));
   }
   function dialog(cm, text, shortText, deflt, f) {
-    if (cm.openDialog) cm.openDialog(text, f, {value: deflt, selectValueOnOpen: true});
+    if (cm.openDialog) {
+      var dialogOptions = {
+        value: deflt,
+        selectValueOnOpen: true
+      };
+      if (cm.state.incrementalSearch) {
+        dialogOptions.closeOnEnter = false;
+        dialogOptions.onInput = cm.state.incrementalSearchOnInput;
+      }
+      cm.openDialog(text, f, dialogOptions);
+    }
     else f(prompt(shortText, deflt));
   }
   function confirmDialog(cm, text, shortText, fs) {
@@ -76,9 +86,9 @@
     var state = getSearchState(cm);
     if (state.query) return findNext(cm, rev);
     var q = cm.getSelection() || state.lastQuery;
-    dialog(cm, queryDialog, "Search for:", q, function(query) {
+    dialog(cm, queryDialog, "Search for:", q, function(query, keyEvent) {
       cm.operation(function() {
-        if (!query || state.query) return;
+
         state.query = parseQuery(query);
         cm.removeOverlay(state.overlay, queryCaseInsensitive(state.query));
         state.overlay = searchOverlay(state.query, queryCaseInsensitive(state.query));
@@ -89,6 +99,12 @@
         }
         state.posFrom = state.posTo = cm.getCursor();
         findNext(cm, rev);
+
+        if (cm.state.incrementalSearch) {
+          CodeMirror.e_stopPropagation(keyEvent);
+          CodeMirror.e_preventDefault(keyEvent);
+        }
+
       });
     });
   }
@@ -103,6 +119,7 @@
     cm.scrollIntoView({from: cursor.from(), to: cursor.to()});
     state.posFrom = cursor.from(); state.posTo = cursor.to();
   });}
+
   function clearSearch(cm) {cm.operation(function() {
     var state = getSearchState(cm);
     state.lastQuery = state.query;
@@ -158,9 +175,22 @@
     });
   }
 
+  CodeMirror.defineOption("incrementalSearch", false, function(cm, val) {
+    cm.state.incrementalSearch = (val === true);
+    cm.state.incrementalSearchOnInput = function(keyEvent, value, close) {
+      console.log('key event fired', keyEvent, value);
+
+      CodeMirror.e_stopPropagation(keyEvent);
+      CodeMirror.e_preventDefault(keyEvent);
+      return true;
+    }
+  });
+
   CodeMirror.commands.find = function(cm) {clearSearch(cm); doSearch(cm);};
   CodeMirror.commands.findNext = doSearch;
+  CodeMirror.commands.incrementNext = function(cm) {};
   CodeMirror.commands.findPrev = function(cm) {doSearch(cm, true);};
+  CodeMirror.commands.incrementPrev = function(cm) {};
   CodeMirror.commands.clearSearch = clearSearch;
   CodeMirror.commands.replace = replace;
   CodeMirror.commands.replaceAll = function(cm) {replace(cm, true);};
